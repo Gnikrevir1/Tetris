@@ -1,0 +1,16 @@
+{
+  "name": "Tierisch Tetris",
+  "short_name": "Tierisch Tetris",
+  "description": "Tetris mit Tierfiguren, Musik und Wolkeneffekt. Version 0.4, Stand 03.11.2026, Christian Stephan.",
+  "lang": "de",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0E2238",
+  "theme_color": "#0E2238",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}

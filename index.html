@@ -1,0 +1,994 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tierisch Tetris">
+<meta name="application-name" content="Tierisch Tetris">
+<meta name="theme-color" content="#0E2238">
+<meta name="format-detection" content="telephone=no">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Tierisch Tetris v0.4</title>
+<style>
+  /* Farbwerte: Annahme einer WAGNER-nahen Blaupalette, exakte CI-Hexwerte noch zu bestätigen */
+  :root {
+    --brand: #005CA9; --brand-dark: #003F73; --accent: #7FB2DE;
+    --bg: #F2F5F9; --surface: #FFFFFF; --text: #1A2433; --muted: #5B6778;
+    --grid: #E1E7EF; --well: #0E2238;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --brand: #3D8FD6; --brand-dark: #1E6BB0; --accent: #9CC6EC;
+      --bg: #0C1520; --surface: #142233; --text: #E6ECF3; --muted: #9AA8B9;
+      --grid: #22344A; --well: #07101A;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; overscroll-behavior: none; }
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; touch-action: manipulation; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    /* Safe Areas: Statusleiste, Notch, Home-Leiste, seitliche Ränder im Querformat */
+    padding: env(safe-area-inset-top, 0px) max(16px, env(safe-area-inset-right, 0px))
+             env(safe-area-inset-bottom, 0px) max(16px, env(safe-area-inset-left, 0px));
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+  }
+  /* Info-Bereiche bleiben scroll- und markierbar */
+  section.info { -webkit-user-select: text; user-select: text; }
+  button, input, label { touch-action: manipulation; }
+  header {
+    max-width: 780px; margin: 0 auto; padding: 20px 0 8px;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  }
+  h1 { margin: 0; font-size: 1.6rem; color: var(--brand); letter-spacing: 0.02em; }
+  .version { color: var(--muted); font-size: 0.9rem; }
+  main {
+    max-width: 780px; margin: 0 auto;
+    display: grid; grid-template-columns: 160px auto 160px; gap: 16px; justify-content: center; align-items: start;
+  }
+  .panel { background: var(--surface); border: 1px solid var(--grid); border-radius: 8px; padding: 12px; }
+  .panel h2 { margin: 0 0 8px; font-size: 0.95rem; color: var(--muted); font-weight: 600; }
+  .stat { margin-bottom: 12px; }
+  .stat .val { font-size: 1.5rem; font-weight: 700; color: var(--brand); font-variant-numeric: tabular-nums; }
+  .side { display: flex; flex-direction: column; gap: 12px; }
+  .wellwrap { position: relative; }
+  canvas#board {
+    display: block; background: var(--well); border: 3px solid var(--brand-dark); border-radius: 6px;
+    width: 300px; height: 600px; max-width: 100%;
+    touch-action: none; -webkit-user-select: none; user-select: none;
+  }
+  .wellwrap, .overlay { touch-action: none; }
+  canvas.mini { display: block; width: 136px; height: 80px; background: var(--well); border-radius: 4px; }
+  .overlay {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(7, 16, 26, 0.78); color: #fff; border-radius: 6px; text-align: center; padding: 20px; gap: 12px;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay p { margin: 0; font-size: 1.15rem; }
+  button {
+    font: inherit; background: var(--brand); color: #fff; border: 0; border-radius: 6px;
+    padding: 10px 18px; cursor: pointer; font-weight: 600;
+  }
+  button:hover { background: var(--brand-dark); }
+  button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .toggle { width: 100%; padding: 8px 10px; margin-bottom: 8px; font-size: 0.9rem; text-align: left; }
+  .toggle[aria-pressed="false"] { background: transparent; color: var(--muted); border: 1px solid var(--grid); }
+  input[type="range"] { width: 100%; accent-color: var(--brand); margin: 4px 0; }
+  .hint { font-size: 0.85rem; color: var(--muted); }
+  .hint strong { color: var(--brand); font-variant-numeric: tabular-nums; }
+  .check { display: flex; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--muted); margin-top: 8px; }
+  .check input { accent-color: var(--brand); }
+  .touch { display: none; max-width: 340px; margin: 14px auto 0; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .touch button { padding: 14px 0; font-size: 1.2rem; }
+  section.info { max-width: 780px; margin: 24px auto 0; }
+  section.info .panel { margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  td { padding: 4px 8px 4px 0; vertical-align: top; border-bottom: 1px solid var(--grid); }
+  td:first-child { white-space: nowrap; font-weight: 600; }
+  footer { max-width: 780px; margin: 16px auto 24px; color: var(--muted); font-size: 0.85rem; }
+  @media (max-width: 680px) {
+    main { grid-template-columns: 1fr 1fr; }
+    .wellwrap { grid-column: 1 / -1; order: -1; justify-self: center; }
+    canvas#board { width: min(80vw, 300px); height: calc(min(80vw, 300px) * 2); }
+    .touch { display: grid; }
+  }
+  @media (pointer: coarse) { .touch { display: grid; } }
+  /* Touch-Gerät per JavaScript erkannt (auch wenn sich das iPad als Desktop meldet) */
+  .touch-device .touch {
+    display: grid; max-width: 520px; gap: 10px; margin-top: 12px;
+    padding-bottom: 4px;
+  }
+  .touch-device .touch button { padding: 16px 0; font-size: 1.6rem; border-radius: 10px; min-height: 58px; }
+  .touch-device .touch button:active { background: var(--brand-dark); transform: scale(0.96); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tierisch Tetris</h1>
+  <span class="version">Version 0.4 | Christian Stephan | 03.11.2026</span>
+</header>
+
+<main>
+  <div class="side">
+    <div class="panel">
+      <h2>Halten (C)</h2>
+      <canvas id="hold" class="mini" width="136" height="80"></canvas>
+    </div>
+    <div class="panel">
+      <div class="stat"><h2>Punkte</h2><div class="val" id="score">0</div></div>
+      <div class="stat"><h2>Reihen</h2><div class="val" id="lines">0</div></div>
+      <div class="stat" style="margin:0"><h2>Level</h2><div class="val" id="level">1</div></div>
+    </div>
+    <div class="panel">
+      <h2>Sound</h2>
+      <button class="toggle" id="musicBtn" aria-pressed="true">Musik an (M)</button>
+      <button class="toggle" id="sfxBtn" aria-pressed="true">Effekte an</button>
+      <label class="hint" for="volume">Lautstärke</label>
+      <input type="range" id="volume" min="0" max="100" value="60">
+    </div>
+  </div>
+
+  <div class="wellwrap">
+    <canvas id="board" width="300" height="600"></canvas>
+    <div class="overlay" id="overlay">
+      <p id="msg">Bereit?</p>
+      <button id="startBtn">Spiel starten</button>
+      <small>Enter startet, P pausiert</small>
+    </div>
+  </div>
+
+  <div class="side">
+    <div class="panel">
+      <h2>Als Nächstes</h2>
+      <canvas id="next" class="mini" width="136" height="240" style="height:240px"></canvas>
+    </div>
+    <div class="panel">
+      <h2><label for="speed">Geschwindigkeit</label></h2>
+      <input type="range" id="speed" min="1" max="15" value="1">
+      <div class="hint">Grundstufe <strong id="speedVal">1</strong></div>
+      <div class="hint">Aktuell <strong id="speedEff">1</strong></div>
+      <label class="check"><input type="checkbox" id="levelUp" checked> Mit Level steigern</label>
+    </div>
+    <div class="panel">
+      <h2>Bestwert</h2>
+      <div class="stat" style="margin:0"><div class="val" id="best">0</div></div>
+    </div>
+  </div>
+</main>
+
+<div class="touch" aria-label="Touch-Steuerung">
+  <button data-act="left" aria-label="Links">◀</button>
+  <button data-act="rotate" aria-label="Drehen">⟳</button>
+  <button data-act="right" aria-label="Rechts">▶</button>
+  <button data-act="soft" aria-label="Schneller fallen">▼</button>
+  <button data-act="hard" aria-label="Sofort ablegen">⤓</button>
+</div>
+
+<section class="info">
+  <div class="panel">
+    <h2>Steuerung</h2>
+    <table>
+      <tr><td>← / →</td><td>Stein verschieben</td></tr>
+      <tr><td>↑ oder X</td><td>Im Uhrzeigersinn drehen</td></tr>
+      <tr><td>Z / Y</td><td>Gegen den Uhrzeigersinn drehen</td></tr>
+      <tr><td>↓</td><td>Schneller fallen (Soft Drop)</td></tr>
+      <tr><td>Leertaste</td><td>Sofort ablegen (Hard Drop)</td></tr>
+      <tr><td>C / Shift</td><td>Stein zurückhalten (Hold)</td></tr>
+      <tr><td>M</td><td>Musik ein- oder ausschalten</td></tr>
+      <tr><td>P / Esc</td><td>Pause</td></tr>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>Begriffe</h2>
+    <table>
+      <tr><td>Tetromino</td><td>Spielstein aus vier Quadraten. Es gibt sieben Formen: I, O, T, S, Z, J, L.</td></tr>
+      <tr><td>Tierfiguren</td><td>Jede Form ist ein Tier: I Dackel, O Küken, T Schwein, S Frosch, Z Fuchs, J Pinguin, L Panda. Das Gesicht bleibt beim Drehen aufrecht.</td></tr>
+      <tr><td>Ghost</td><td>Halbtransparente Vorschau, wo der Stein landen würde.</td></tr>
+      <tr><td>Hold</td><td>Ein Stein kann einmal pro Zug zur Seite gelegt und später eingesetzt werden.</td></tr>
+      <tr><td>7-Bag</td><td>Zufallsverfahren: alle sieben Formen werden gemischt und nacheinander ausgegeben.</td></tr>
+      <tr><td>Wall Kick</td><td>Beim Drehen an einer Wand wird der Stein leicht versetzt, damit die Drehung gelingt.</td></tr>
+      <tr><td>Lock Delay</td><td>Kurze Verzögerung (0,5 s), bevor ein gelandeter Stein festgesetzt wird.</td></tr>
+      <tr><td>Grundstufe</td><td>Per Schieberegler gewählte Fallgeschwindigkeit. Mit aktivem Level-Anstieg kommt pro Level eine Stufe hinzu (max. 20).</td></tr>
+      <tr><td>Partikeleffekt</td><td>Grafikeffekt aus vielen kleinen Einzelelementen, hier die Wolken beim Auflösen einer Reihe.</td></tr>
+      <tr><td>Web Audio API</td><td>Browser-Schnittstelle, mit der Töne direkt im Browser erzeugt werden, ohne Audiodateien.</td></tr>
+      <tr><td>Web-App-Manifest</td><td>Datei (manifest.webmanifest), die Name, Symbol und Darstellung festlegt, wenn das Spiel als App auf dem Home-Bildschirm liegt.</td></tr>
+      <tr><td>Standalone</td><td>Anzeige als eigenes App-Fenster ohne Safari-Adressleiste.</td></tr>
+      <tr><td>Safe Area</td><td>Bildschirmbereich, der nicht von Statusleiste, Kameraaussparung oder Home-Leiste verdeckt wird.</td></tr>
+      <tr><td>GitHub Pages</td><td>Kostenloser Hosting-Dienst von GitHub, der Dateien eines Repositorys als Webseite veröffentlicht.</td></tr>
+      <tr><td>Chiptune</td><td>Musikstil mit einfachen Wellenformen, typisch für Videospiele der 80er und 90er Jahre.</td></tr>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>Quellen</h2>
+    <table>
+      <tr><td>Spiellogik</td><td>Eigene Implementierung, keine externen Bibliotheken. Klassifizierung: Eigenentwicklung.</td></tr>
+      <tr><td>Tierfiguren</td><td>Eigene, im Code gezeichnete Figuren ohne Vorlage. Klassifizierung: Eigenentwicklung.</td></tr>
+      <tr><td>Musik</td><td>Eigene Komposition im Chiptune-Stil, ohne Vorlage. Klassifizierung: Eigenentwicklung.</td></tr>
+      <tr><td>Soundeffekte</td><td>Synthetisch im Browser erzeugt (Web Audio API). Klassifizierung: Eigenentwicklung.</td></tr>
+      <tr><td>Punktesystem</td><td>An gängige Tetris-Regeln angelehnt (100 / 300 / 500 / 800 Punkte × Level). Klassifizierung: Annahme, nicht gegen eine offizielle Spezifikation geprüft.</td></tr>
+      <tr><td>iPad-Anpassungen</td><td>Meta-Tags, Safe Areas und Manifest nach allgemeinem Webstandard-Wissen. Klassifizierung: Annahme, nicht gegen die aktuelle Apple-Dokumentation geprüft.</td></tr>
+      <tr><td>Farben</td><td>Blaupalette als Annäherung an das WAGNER-Erscheinungsbild. Klassifizierung: Annahme, exakte CI-Werte offen.</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer>Version 0.4, Stand 03.11.2026, erstellt für Christian Stephan</footer>
+
+<script>
+(() => {
+  const COLS = 10, ROWS = 20, SIZE = 30;
+  const IS_TOUCH = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  if (IS_TOUCH) document.documentElement.classList.add('touch-device');
+  const board = document.getElementById('board');
+  const ctx = board.getContext('2d');
+  const holdCtx = document.getElementById('hold').getContext('2d');
+  const nextCtx = document.getElementById('next').getContext('2d');
+  const $ = id => document.getElementById(id);
+
+  // Jede Form ist ein Tier. 2 markiert den Kopf, 1 den Körper.
+  const ANIMALS = {
+    I: { name: 'Dackel',  color: '#C8874E', dark: '#7A4A24' },
+    O: { name: 'Küken',   color: '#F7D046', dark: '#C99A12' },
+    T: { name: 'Schwein', color: '#F4A6BA', dark: '#C9657F' },
+    S: { name: 'Frosch',  color: '#6CC46A', dark: '#2F7D35' },
+    Z: { name: 'Fuchs',   color: '#E8693D', dark: '#9E3A16' },
+    J: { name: 'Pinguin', color: '#2F5F95', dark: '#16304F' },
+    L: { name: 'Panda',   color: '#F2F2F2', dark: '#2A2A2A' }
+  };
+  const COLORS = Object.fromEntries(Object.entries(ANIMALS).map(([k, v]) => [k, v.color]));
+  const SHAPES = {
+    I: [[0,0,0,0],[2,1,1,1],[0,0,0,0],[0,0,0,0]],
+    O: [[2,1],[1,1]],
+    T: [[0,2,0],[1,1,1],[0,0,0]],
+    S: [[0,1,2],[1,1,0],[0,0,0]],
+    Z: [[2,1,0],[0,1,1],[0,0,0]],
+    J: [[2,0,0],[1,1,1],[0,0,0]],
+    L: [[0,0,2],[1,1,1],[0,0,0]]
+  };
+  const LINE_POINTS = [0, 100, 300, 500, 800];
+
+  /* ---------- Audio (Web Audio API, alles synthetisch) ---------- */
+  const audio = (() => {
+    let ac = null, master, musicGain, sfxGain, noiseBuf;
+    let musicOn = true, sfxOn = true, musicTimer = null, step = 0, nextTime = 0;
+    const BPM = 138, STEP = 60 / BPM / 2;
+    // Eigene Melodie in a-Moll, 8 Takte zu je 8 Achteln (null = Pause)
+    const LEAD = [
+      76,null,74,72, 74,76,79,null,
+      76,74,72,null, 69,72,74,null,
+      77,null,76,74, 72,74,76,null,
+      74,72,71,72,   69,null,null,null,
+      72,74,76,null, 79,null,81,79,
+      77,76,74,null, 72,null,74,76,
+      77,79,81,null, 79,77,76,74,
+      76,null,71,null, 69,null,null,null
+    ];
+    const BASS = [45, 41, 38, 40, 48, 41, 38, 40]; // Grundtöne je Takt
+    const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+
+    function init() {
+      if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      ac = new AC();
+      master = ac.createGain(); master.gain.value = 0.6; master.connect(ac.destination);
+      musicGain = ac.createGain(); musicGain.gain.value = 0.32; musicGain.connect(master);
+      sfxGain = ac.createGain(); sfxGain.gain.value = 0.8; sfxGain.connect(master);
+      noiseBuf = ac.createBuffer(1, ac.sampleRate, ac.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    }
+
+    function tone(freq, start, dur, type, vol, dest, slideTo) {
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, start);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, start + dur);
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(vol, start + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      o.connect(g); g.connect(dest);
+      o.start(start); o.stop(start + dur + 0.03);
+    }
+
+    function noise(start, dur, vol, dest, freq, freqTo, q = 0.8) {
+      const s = ac.createBufferSource(), f = ac.createBiquadFilter(), g = ac.createGain();
+      s.buffer = noiseBuf;
+      f.type = 'bandpass'; f.Q.value = q;
+      f.frequency.setValueAtTime(freq, start);
+      if (freqTo) f.frequency.exponentialRampToValueAtTime(freqTo, start + dur);
+      g.gain.setValueAtTime(0.0001, start);
+      g.gain.exponentialRampToValueAtTime(vol, start + Math.min(0.08, dur / 3));
+      g.gain.exponentialRampToValueAtTime(0.0001, start + dur);
+      s.connect(f); f.connect(g); g.connect(dest);
+      s.start(start); s.stop(start + dur + 0.03);
+    }
+
+    function sfx(fn) { if (ac && sfxOn) fn(ac.currentTime); }
+
+    function schedule() {
+      while (nextTime < ac.currentTime + 0.12) {
+        const i = step % LEAD.length;
+        const n = LEAD[i];
+        if (n) tone(mtof(n), nextTime, STEP * 0.9, 'square', 0.1, musicGain);
+        const root = BASS[Math.floor(i / 8)];
+        tone(mtof(root + (i % 2 ? 12 : 0)), nextTime, STEP * 0.85, 'triangle', 0.28, musicGain);
+        if (i % 2 === 1) noise(nextTime, 0.04, 0.05, musicGain, 9000, null, 1.5);
+        step++; nextTime += STEP;
+      }
+    }
+
+    return {
+      init,
+      startMusic(reset) {
+        if (!ac || !musicOn || musicTimer) return;
+        if (reset) step = 0;
+        nextTime = ac.currentTime + 0.05;
+        musicTimer = setInterval(schedule, 25);
+      },
+      stopMusic() { clearInterval(musicTimer); musicTimer = null; },
+      setMusic(on) { musicOn = on; if (!on) this.stopMusic(); },
+      setSfx(on) { sfxOn = on; },
+      setVolume(v) { if (master) master.gain.value = v; },
+      resume() {
+        if (!ac) return;
+        const resync = () => { if (musicTimer) nextTime = ac.currentTime + 0.05; };
+        if (ac.state !== 'running') ac.resume().then(resync).catch(() => {});
+        else resync();
+      },
+      suspend() { if (ac && ac.state === 'running') ac.suspend().catch(() => {}); },
+      get musicOn() { return musicOn; },
+      move:   () => sfx(t => tone(240, t, 0.04, 'square', 0.06, sfxGain)),
+      rotate: () => sfx(t => tone(620, t, 0.07, 'square', 0.07, sfxGain, 900)),
+      hold:   () => sfx(t => tone(500, t, 0.1, 'triangle', 0.15, sfxGain, 330)),
+      lock:   () => sfx(t => tone(300, t, 0.06, 'triangle', 0.18, sfxGain)),
+      hard:   () => sfx(t => { tone(190, t, 0.18, 'sine', 0.45, sfxGain, 55); noise(t, 0.15, 0.25, sfxGain, 700, 200); }),
+      clear:  n => sfx(t => {
+        // "Puff": Rauschstoß, dann aufsteigendes Wegfliegen
+        noise(t, 0.25, 0.35, sfxGain, 500, 1200, 0.6);
+        noise(t + 0.2, 0.7, 0.25, sfxGain, 900, 5000, 1.2);
+        const notes = [72, 76, 79, 84, 88, 91];
+        for (let k = 0; k < n + 2; k++) tone(mtof(notes[k]), t + 0.25 + k * 0.06, 0.18, 'square', 0.08, sfxGain);
+      }),
+      levelUp: () => sfx(t => [72, 76, 79, 84].forEach((m, k) => tone(mtof(m), t + k * 0.09, 0.22, 'triangle', 0.25, sfxGain))),
+      over:   () => sfx(t => [69, 65, 62, 57].forEach((m, k) => tone(mtof(m), t + k * 0.22, 0.35, 'square', 0.12, sfxGain)))
+    };
+  })();
+
+  /* ---------- Spielzustand ---------- */
+  let grid, bag, queue, piece, holdType, holdUsed;
+  let score, lines, level, dropTimer, lockTimer, state = 'idle';
+  let clearing = null, clouds = [], last = 0, pieceId = 0;
+  let best = 0;
+  try { best = parseInt(localStorage.getItem('tetris-best') || '0', 10) || 0; } catch (e) {}
+  $('best').textContent = best;
+
+  const emptyGrid = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+
+  function refillBag() {
+    const types = Object.keys(SHAPES);
+    for (let i = types.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [types[i], types[j]] = [types[j], types[i]];
+    }
+    bag.push(...types);
+  }
+  function fillQueue() { while (queue.length < 4) { if (!bag.length) refillBag(); queue.push(bag.shift()); } }
+  function nextType() { fillQueue(); const t = queue.shift(); fillQueue(); return t; }
+
+  function spawn(type) {
+    const m = SHAPES[type].map(r => r.slice());
+    piece = { id: ++pieceId, type, m, x: Math.floor((COLS - m[0].length) / 2), y: type === 'I' ? -1 : 0 };
+    lockTimer = 0; dropTimer = 0;
+    if (collides(piece.m, piece.x, piece.y)) gameOver();
+  }
+  function spawnNext() { spawn(nextType()); drawMini(nextCtx, queue.slice(0, 3), 80); }
+
+  function collides(m, x, y) {
+    for (let r = 0; r < m.length; r++)
+      for (let c = 0; c < m[r].length; c++) {
+        if (!m[r][c]) continue;
+        const gx = x + c, gy = y + r;
+        if (gx < 0 || gx >= COLS || gy >= ROWS) return true;
+        if (gy >= 0 && grid[gy][gx]) return true;
+      }
+    return false;
+  }
+
+  function rotateMatrix(m, dir) {
+    const n = m.length, out = Array.from({ length: n }, () => Array(n).fill(0));
+    for (let r = 0; r < n; r++)
+      for (let c = 0; c < n; c++)
+        if (dir > 0) out[c][n - 1 - r] = m[r][c]; else out[n - 1 - c][r] = m[r][c];
+    return out;
+  }
+
+  function rotate(dir) {
+    if (piece.type === 'O') return;
+    const m = rotateMatrix(piece.m, dir);
+    const kicks = [[0,0],[-1,0],[1,0],[-2,0],[2,0],[0,-1]];
+    for (const [dx, dy] of kicks) {
+      if (!collides(m, piece.x + dx, piece.y + dy)) {
+        piece.m = m; piece.x += dx; piece.y += dy; lockTimer = 0; audio.rotate(); return;
+      }
+    }
+  }
+
+  function move(dx) {
+    if (!collides(piece.m, piece.x + dx, piece.y)) { piece.x += dx; lockTimer = 0; audio.move(); }
+  }
+
+  function softDrop() {
+    if (!collides(piece.m, piece.x, piece.y + 1)) { piece.y++; score += 1; dropTimer = 0; updateHud(); }
+  }
+
+  function hardDrop() {
+    let d = 0;
+    while (!collides(piece.m, piece.x, piece.y + 1)) { piece.y++; d++; }
+    score += d * 2;
+    audio.hard();
+    lock(true);
+  }
+
+  function hold() {
+    if (holdUsed) return;
+    const current = piece.type;
+    if (holdType) spawn(holdType); else spawnNext();
+    holdType = current; holdUsed = true;
+    audio.hold();
+    drawMini(holdCtx, [holdType], 80);
+  }
+
+  function lock(silent) {
+    for (let r = 0; r < piece.m.length; r++)
+      for (let c = 0; c < piece.m[r].length; c++)
+        if (piece.m[r][c]) {
+          const gy = piece.y + r;
+          if (gy < 0) { gameOver(); return; }
+          grid[gy][piece.x + c] = { t: piece.type, id: piece.id, head: piece.m[r][c] === 2 };
+        }
+    holdUsed = false;
+    piece = null;
+    const full = [];
+    for (let r = 0; r < ROWS; r++) if (grid[r].every(Boolean)) full.push(r);
+    if (full.length) {
+      state = 'clearing';
+      clearing = { rows: full, t: 0 };
+      full.forEach(r => grid[r].forEach((v, c) =>
+        spawnCloud(c * SIZE + SIZE / 2, r * SIZE + SIZE / 2, COLORS[v.t])));
+      audio.clear(full.length);
+    } else {
+      if (!silent) audio.lock();
+      updateHud();
+      spawnNext();
+    }
+  }
+
+  function finishClear() {
+    const rows = clearing.rows;
+    grid = grid.filter((_, i) => !rows.includes(i));
+    while (grid.length < ROWS) grid.unshift(Array(COLS).fill(null));
+    const oldLevel = level;
+    score += LINE_POINTS[rows.length] * level;
+    lines += rows.length;
+    level = Math.floor(lines / 10) + 1;
+    if (level > oldLevel) audio.levelUp();
+    clearing = null;
+    state = 'running';
+    updateHud();
+    spawnNext();
+  }
+
+  /* ---------- Wolkeneffekt ---------- */
+  const PUFF_MS = 260, FLY_MS = 950;
+  function spawnCloud(x, y, color) {
+    const puffs = [];
+    for (let i = 0; i < 5; i++) puffs.push({
+      dx: (Math.random() - 0.5) * SIZE * 0.8,
+      dy: (Math.random() - 0.5) * SIZE * 0.5,
+      r: SIZE * (0.22 + Math.random() * 0.16)
+    });
+    const side = x < (COLS * SIZE) / 2 ? -1 : 1;
+    clouds.push({
+      x, y, color, puffs, t: -Math.random() * 90,
+      vx: side * (0.05 + Math.random() * 0.12) + (Math.random() - 0.5) * 0.06,
+      vy: -(0.08 + Math.random() * 0.1)
+    });
+  }
+
+  function updateClouds(dt) {
+    for (const cl of clouds) {
+      cl.t += dt;
+      if (cl.t > PUFF_MS) {
+        cl.x += cl.vx * dt;
+        cl.y += cl.vy * dt;
+        cl.vy -= 0.00035 * dt; // beschleunigt nach oben
+        cl.vx *= 1.002;
+      }
+    }
+    clouds = clouds.filter(cl => cl.t < PUFF_MS + FLY_MS);
+  }
+
+  function drawClouds() {
+    for (const cl of clouds) {
+      if (cl.t < 0) continue;
+      const grow = Math.min(1, cl.t / PUFF_MS);
+      const fly = Math.max(0, (cl.t - PUFF_MS) / FLY_MS);
+      const alpha = 1 - fly;
+      const scale = 0.4 + grow * 0.7 + fly * 0.8;
+      for (const p of cl.puffs) {
+        const px = cl.x + p.dx * scale, py = cl.y + p.dy * scale, r = p.r * scale;
+        ctx.globalAlpha = alpha * 0.9;
+        ctx.fillStyle = '#F4F8FC';
+        ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill();
+        if (grow < 1) {
+          ctx.globalAlpha = (1 - grow) * 0.8;
+          ctx.fillStyle = cl.color;
+          ctx.beginPath(); ctx.arc(px, py, r * 0.8, 0, Math.PI * 2); ctx.fill();
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  /* ---------- Geschwindigkeit ---------- */
+  const speedEl = $('speed'), levelUpEl = $('levelUp');
+  function speedStage() {
+    const base = +speedEl.value;
+    return Math.min(20, base + (levelUpEl.checked && level ? level - 1 : 0));
+  }
+  const dropInterval = () => Math.max(45, 800 * Math.pow(0.82, speedStage() - 1));
+  function updateSpeedHud() {
+    $('speedVal').textContent = speedEl.value;
+    $('speedEff').textContent = speedStage();
+  }
+  speedEl.addEventListener('input', updateSpeedHud);
+  levelUpEl.addEventListener('change', updateSpeedHud);
+  [speedEl, levelUpEl].forEach(el => el.addEventListener('change', () => el.blur()));
+
+  function updateHud() {
+    $('score').textContent = score;
+    $('lines').textContent = lines;
+    $('level').textContent = level;
+    updateSpeedHud();
+  }
+
+  /* ---------- Zeichnen: Tierkörper ---------- */
+  function bodyPath(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r[0], y);
+    c.lineTo(x + w - r[1], y); c.quadraticCurveTo(x + w, y, x + w, y + r[1]);
+    c.lineTo(x + w, y + h - r[2]); c.quadraticCurveTo(x + w, y + h, x + w - r[2], y + h);
+    c.lineTo(x + r[3], y + h); c.quadraticCurveTo(x, y + h, x, y + h - r[3]);
+    c.lineTo(x, y + r[0]); c.quadraticCurveTo(x, y, x + r[0], y);
+    c.closePath();
+  }
+  function ellipse(c, x, y, rx, ry, color, rot = 0) {
+    c.fillStyle = color; c.beginPath(); c.ellipse(x, y, rx, ry, rot, 0, Math.PI * 2); c.fill();
+  }
+  function tri(c, ax, ay, bx, by, cx, cy, color) {
+    c.fillStyle = color; c.beginPath(); c.moveTo(ax, ay); c.lineTo(bx, by); c.lineTo(cx, cy); c.closePath(); c.fill();
+  }
+
+  // Ohren und Kopfaufsätze, hinter dem Körper gezeichnet
+  function drawEars(c, t, x, y, s, a) {
+    const cx = x + s / 2;
+    switch (t) {
+      case 'T': // Schwein
+        tri(c, x + s * 0.12, y + s * 0.3, x + s * 0.2, y - s * 0.08, x + s * 0.42, y + s * 0.15, a.color);
+        tri(c, x + s * 0.88, y + s * 0.3, x + s * 0.8, y - s * 0.08, x + s * 0.58, y + s * 0.15, a.color);
+        break;
+      case 'Z': // Fuchs
+        tri(c, x + s * 0.08, y + s * 0.35, x + s * 0.18, y - s * 0.14, x + s * 0.45, y + s * 0.12, a.color);
+        tri(c, x + s * 0.92, y + s * 0.35, x + s * 0.82, y - s * 0.14, x + s * 0.55, y + s * 0.12, a.color);
+        tri(c, x + s * 0.15, y + s * 0.02, x + s * 0.18, y - s * 0.14, x + s * 0.26, y - s * 0.02, a.dark);
+        tri(c, x + s * 0.85, y + s * 0.02, x + s * 0.82, y - s * 0.14, x + s * 0.74, y - s * 0.02, a.dark);
+        break;
+      case 'L': // Panda
+        ellipse(c, x + s * 0.2, y + s * 0.12, s * 0.15, s * 0.15, a.dark);
+        ellipse(c, x + s * 0.8, y + s * 0.12, s * 0.15, s * 0.15, a.dark);
+        break;
+      case 'S': // Frosch: Augenhügel
+        ellipse(c, x + s * 0.3, y + s * 0.12, s * 0.17, s * 0.17, a.color);
+        ellipse(c, x + s * 0.7, y + s * 0.12, s * 0.17, s * 0.17, a.color);
+        break;
+      case 'O': // Küken: Federbüschel
+        c.strokeStyle = a.dark; c.lineWidth = Math.max(1.2, s * 0.06); c.lineCap = 'round';
+        c.beginPath(); c.moveTo(cx, y + s * 0.08); c.quadraticCurveTo(cx - s * 0.12, y - s * 0.12, cx - s * 0.02, y - s * 0.14); c.stroke();
+        c.beginPath(); c.moveTo(cx, y + s * 0.08); c.quadraticCurveTo(cx + s * 0.14, y - s * 0.08, cx + s * 0.1, y - s * 0.12); c.stroke();
+        break;
+    }
+  }
+
+  function eyes(c, cx, cy, s, gap, blink, color = '#1B1B1F') {
+    const r = s * 0.075;
+    [-1, 1].forEach(side => {
+      const ex = cx + side * gap;
+      if (blink) {
+        c.strokeStyle = color; c.lineWidth = Math.max(1, s * 0.05); c.lineCap = 'round';
+        c.beginPath(); c.moveTo(ex - r, cy); c.quadraticCurveTo(ex, cy + r * 0.8, ex + r, cy); c.stroke();
+      } else {
+        ellipse(c, ex, cy, r, r * 1.1, color);
+        ellipse(c, ex + r * 0.35, cy - r * 0.4, r * 0.38, r * 0.38, '#FFFFFF');
+      }
+    });
+  }
+  function smile(c, cx, cy, w, s, color = '#1B1B1F') {
+    c.strokeStyle = color; c.lineWidth = Math.max(1, s * 0.045); c.lineCap = 'round';
+    c.beginPath(); c.moveTo(cx - w, cy); c.quadraticCurveTo(cx - w / 2, cy + w * 0.9, cx, cy); c.quadraticCurveTo(cx + w / 2, cy + w * 0.9, cx + w, cy); c.stroke();
+  }
+  function blush(c, cx, cy, s) {
+    ellipse(c, cx - s * 0.3, cy + s * 0.12, s * 0.09, s * 0.055, 'rgba(255,120,140,0.55)');
+    ellipse(c, cx + s * 0.3, cy + s * 0.12, s * 0.09, s * 0.055, 'rgba(255,120,140,0.55)');
+  }
+
+  function drawFace(c, t, x, y, s, a, blink) {
+    const cx = x + s / 2, cy = y + s * 0.48;
+    switch (t) {
+      case 'I': // Dackel
+        eyes(c, cx, cy, s, s * 0.17, blink);
+        ellipse(c, cx, cy + s * 0.17, s * 0.09, s * 0.065, '#3A2414');
+        smile(c, cx, cy + s * 0.25, s * 0.07, s);
+        blush(c, cx, cy, s);
+        break;
+      case 'O': // Küken
+        eyes(c, cx, cy - s * 0.02, s, s * 0.17, blink);
+        tri(c, cx - s * 0.09, cy + s * 0.1, cx + s * 0.09, cy + s * 0.1, cx, cy + s * 0.22, '#F08A24');
+        blush(c, cx, cy, s);
+        break;
+      case 'T': // Schwein
+        eyes(c, cx, cy - s * 0.06, s, s * 0.2, blink);
+        ellipse(c, cx, cy + s * 0.14, s * 0.17, s * 0.11, '#E77F9B');
+        ellipse(c, cx - s * 0.06, cy + s * 0.14, s * 0.03, s * 0.045, '#9C3F58');
+        ellipse(c, cx + s * 0.06, cy + s * 0.14, s * 0.03, s * 0.045, '#9C3F58');
+        break;
+      case 'S': // Frosch
+        ellipse(c, x + s * 0.3, y + s * 0.13, s * 0.11, s * 0.11, '#FFFFFF');
+        ellipse(c, x + s * 0.7, y + s * 0.13, s * 0.11, s * 0.11, '#FFFFFF');
+        eyes(c, cx, y + s * 0.14, s, s * 0.2, blink);
+        smile(c, cx, cy + s * 0.12, s * 0.2, s, '#1F4F22');
+        blush(c, cx, cy + s * 0.02, s);
+        break;
+      case 'Z': // Fuchs
+        ellipse(c, cx - s * 0.2, cy + s * 0.18, s * 0.2, s * 0.15, '#FFF4EA');
+        ellipse(c, cx + s * 0.2, cy + s * 0.18, s * 0.2, s * 0.15, '#FFF4EA');
+        eyes(c, cx, cy - s * 0.04, s, s * 0.18, blink);
+        ellipse(c, cx, cy + s * 0.12, s * 0.06, s * 0.045, '#1B1B1F');
+        break;
+      case 'J': // Pinguin
+        ellipse(c, cx, cy + s * 0.04, s * 0.32, s * 0.3, '#F4F6F8');
+        eyes(c, cx, cy - s * 0.02, s, s * 0.14, blink);
+        tri(c, cx - s * 0.08, cy + s * 0.1, cx + s * 0.08, cy + s * 0.1, cx, cy + s * 0.2, '#F5A623');
+        blush(c, cx, cy + s * 0.02, s);
+        break;
+      case 'L': // Panda
+        ellipse(c, cx - s * 0.18, cy, s * 0.11, s * 0.14, a.dark, 0.5);
+        ellipse(c, cx + s * 0.18, cy, s * 0.11, s * 0.14, a.dark, -0.5);
+        eyes(c, cx, cy - s * 0.01, s, s * 0.18, blink, '#FFFFFF');
+        ellipse(c, cx + s * 0.2, cy - s * 0.04, s * 0.035, s * 0.035, '#1B1B1F');
+        ellipse(c, cx - s * 0.16, cy - s * 0.04, s * 0.035, s * 0.035, '#1B1B1F');
+        ellipse(c, cx, cy + s * 0.15, s * 0.06, s * 0.045, a.dark);
+        blush(c, cx, cy + s * 0.03, s);
+        break;
+    }
+  }
+
+  // Muster auf Körperteilen ohne Kopf
+  function drawPattern(c, t, x, y, s, a, conn) {
+    switch (t) {
+      case 'J': ellipse(c, x + s / 2, y + s * 0.55, s * 0.3, s * 0.3, '#F4F6F8'); break;
+      case 'S':
+        ellipse(c, x + s * 0.3, y + s * 0.35, s * 0.08, s * 0.08, 'rgba(255,255,255,0.28)');
+        ellipse(c, x + s * 0.68, y + s * 0.62, s * 0.06, s * 0.06, 'rgba(255,255,255,0.28)');
+        break;
+      case 'O': if (!conn.d) ellipse(c, x + s * 0.5, y + s * 0.5, s * 0.22, s * 0.14, 'rgba(201,154,18,0.55)', -0.3); break;
+      case 'Z': if (!conn.r && !conn.l) ellipse(c, x + s * 0.5, y + s * 0.6, s * 0.18, s * 0.14, '#FFF4EA'); break;
+      case 'I': ellipse(c, x + s * 0.5, y + s * 0.45, s * 0.16, s * 0.1, 'rgba(122,74,36,0.25)'); break;
+    }
+  }
+
+  function drawAnimalCell(c, x, y, s, t, head, conn, o = {}) {
+    const a = ANIMALS[t];
+    const g = Math.max(1, s * 0.05);
+    const x0 = x + (conn.l ? 0 : g), y0 = y + (conn.u ? 0 : g);
+    const w = s - (conn.l ? 0 : g) - (conn.r ? 0 : g);
+    const h = s - (conn.u ? 0 : g) - (conn.d ? 0 : g);
+    const R = s * 0.4;
+    const rad = [
+      !conn.u && !conn.l ? R : 0, !conn.u && !conn.r ? R : 0,
+      !conn.d && !conn.r ? R : 0, !conn.d && !conn.l ? R : 0
+    ];
+    c.save();
+    c.globalAlpha = o.alpha ?? 1;
+    if (o.scale && o.scale !== 1) {
+      c.translate(x + s / 2, y + s / 2); c.scale(o.scale, o.scale); c.translate(-(x + s / 2), -(y + s / 2));
+    }
+    if (o.ghost) {
+      bodyPath(c, x0 + 1, y0 + 1, w - 2, h - 2, rad);
+      c.strokeStyle = a.color; c.lineWidth = 2; c.globalAlpha = 0.45; c.stroke();
+      c.restore(); return;
+    }
+    if (head && !conn.u) drawEars(c, t, x, y, s, a);
+    c.fillStyle = a.color; bodyPath(c, x0, y0, w, h, rad); c.fill();
+    if (!conn.u) ellipse(c, x + s * 0.32, y + s * 0.22, s * 0.14, s * 0.07, 'rgba(255,255,255,0.22)', -0.4);
+    if (!head) drawPattern(c, t, x, y, s, a, conn);
+    if (!conn.d) {
+      const pc = t === 'L' ? a.dark : t === 'O' ? '#F08A24' : t === 'J' ? '#F5A623' : 'rgba(0,0,0,0.25)';
+      ellipse(c, x + s * 0.3, y + s - g - s * 0.02, s * 0.12, s * 0.07, pc);
+      ellipse(c, x + s * 0.7, y + s - g - s * 0.02, s * 0.12, s * 0.07, pc);
+    }
+    if (head) {
+      if (t === 'I') { // Dackel: Schlappohren seitlich
+        ellipse(c, x + s * 0.1, y + s * 0.45, s * 0.1, s * 0.22, a.dark, 0.25);
+        ellipse(c, x + s * 0.9, y + s * 0.45, s * 0.1, s * 0.22, a.dark, -0.25);
+      }
+      drawFace(c, t, x, y, s, a, o.blink);
+    }
+    c.restore();
+  }
+
+  const mConn = (m, r, c) => ({
+    u: !!(m[r - 1] && m[r - 1][c]), d: !!(m[r + 1] && m[r + 1][c]),
+    l: !!m[r][c - 1], r: !!m[r][c + 1]
+  });
+  function gConn(r, c) {
+    const id = grid[r][c].id;
+    const same = (rr, cc) => rr >= 0 && rr < ROWS && cc >= 0 && cc < COLS && grid[rr][cc] && grid[rr][cc].id === id;
+    return { u: same(r - 1, c), d: same(r + 1, c), l: same(r, c - 1), r: same(r, c + 1) };
+  }
+  const isBlinking = (id, now) => ((now + id * 1373) % 4200) < 150;
+
+  function draw(now = performance.now()) {
+    ctx.clearRect(0, 0, board.width, board.height);
+    ctx.strokeStyle = 'rgba(127,178,222,0.08)'; ctx.lineWidth = 1;
+    for (let x = 1; x < COLS; x++) { ctx.beginPath(); ctx.moveTo(x * SIZE, 0); ctx.lineTo(x * SIZE, ROWS * SIZE); ctx.stroke(); }
+    for (let y = 1; y < ROWS; y++) { ctx.beginPath(); ctx.moveTo(0, y * SIZE); ctx.lineTo(COLS * SIZE, y * SIZE); ctx.stroke(); }
+    const p = clearing ? Math.min(1, clearing.t / PUFF_MS) : 0;
+    for (let r = 0; r < ROWS; r++) {
+      const vanishing = clearing && clearing.rows.includes(r);
+      for (let c = 0; c < COLS; c++) {
+        const v = grid[r][c];
+        if (!v) continue;
+        const o = { blink: isBlinking(v.id, now) };
+        if (vanishing) { o.alpha = 1 - p; o.scale = 1 - p * 0.6; }
+        drawAnimalCell(ctx, c * SIZE, r * SIZE, SIZE, v.t, v.head, gConn(r, c), o);
+      }
+    }
+    if (piece && state !== 'over') {
+      let gy = piece.y;
+      while (!collides(piece.m, piece.x, gy + 1)) gy++;
+      const m = piece.m;
+      for (let r = 0; r < m.length; r++)
+        for (let c = 0; c < m[r].length; c++)
+          if (m[r][c] && gy + r >= 0 && gy !== piece.y)
+            drawAnimalCell(ctx, (piece.x + c) * SIZE, (gy + r) * SIZE, SIZE, piece.type, false, mConn(m, r, c), { ghost: true });
+      for (let r = 0; r < m.length; r++)
+        for (let c = 0; c < m[r].length; c++)
+          if (m[r][c] && piece.y + r >= 0)
+            drawAnimalCell(ctx, (piece.x + c) * SIZE, (piece.y + r) * SIZE, SIZE, piece.type, m[r][c] === 2, mConn(m, r, c), { blink: isBlinking(piece.id, now) });
+    }
+    drawClouds();
+  }
+
+  function drawMini(c, types, slotH) {
+    const cw = c.canvas._w || c.canvas.width, chh = c.canvas._h || c.canvas.height;
+    c.clearRect(0, 0, cw, chh);
+    const s = 20;
+    types.forEach((t, i) => {
+      const full = SHAPES[t];
+      const rows = full.filter(r => r.some(Boolean));
+      const minC = Math.min(...rows.map(r => r.findIndex(v => v)));
+      const maxC = Math.max(...rows.map(r => r.length - 1 - [...r].reverse().findIndex(v => v)));
+      const m = rows.map(r => r.slice(minC, maxC + 1));
+      const w = maxC - minC + 1;
+      const ox = (cw - w * s) / 2;
+      const oy = i * slotH + (slotH - m.length * s) / 2 + 3;
+      m.forEach((row, r) => row.forEach((v, col) => {
+        if (v) drawAnimalCell(c, ox + col * s, oy + r * s, s, t, v === 2, mConn(m, r, col));
+      }));
+    });
+  }
+
+  /* ---------- Spielschleife ---------- */
+  function frame(t) {
+    const dt = Math.min(50, t - (last || t)); last = t;
+    if (state === 'running' && piece) {
+      dropTimer += dt;
+      if (dropTimer >= dropInterval()) {
+        dropTimer = 0;
+        if (!collides(piece.m, piece.x, piece.y + 1)) piece.y++;
+      }
+      if (collides(piece.m, piece.x, piece.y + 1)) {
+        lockTimer += dt;
+        if (lockTimer >= 500) lock();
+      } else lockTimer = 0;
+    } else if (state === 'clearing') {
+      clearing.t += dt;
+      if (clearing.t >= PUFF_MS + 40) finishClear();
+    }
+    if (state !== 'paused') updateClouds(dt);
+    draw(t);
+    requestAnimationFrame(frame);
+  }
+
+  function start() {
+    audio.init();
+    grid = emptyGrid(); bag = []; queue = []; clouds = []; clearing = null;
+    holdType = null; holdUsed = false;
+    score = 0; lines = 0; level = 1;
+    updateHud();
+    drawMini(holdCtx, [], 80);
+    state = 'running';
+    spawnNext();
+    $('overlay').hidden = true;
+    audio.stopMusic(); audio.startMusic(true);
+  }
+
+  function togglePause() {
+    if (state === 'running' || state === 'clearing') {
+      state = 'paused'; pausedFromClear = !!clearing;
+      $('msg').textContent = 'Pause'; $('startBtn').textContent = 'Weiterspielen';
+      $('overlay').hidden = false;
+      audio.stopMusic();
+    } else if (state === 'paused') {
+      state = pausedFromClear ? 'clearing' : 'running';
+      $('overlay').hidden = true;
+      audio.init(); audio.startMusic(false);
+    }
+  }
+  let pausedFromClear = false;
+
+  function gameOver() {
+    state = 'over';
+    audio.stopMusic(); audio.over();
+    if (score > best) {
+      best = score; $('best').textContent = best;
+      try { localStorage.setItem('tetris-best', String(best)); } catch (e) {}
+    }
+    $('msg').textContent = 'Spiel vorbei: ' + score + ' Punkte';
+    $('startBtn').textContent = 'Neues Spiel';
+    $('overlay').hidden = false;
+  }
+
+  $('startBtn').addEventListener('click', () => state === 'paused' ? togglePause() : start());
+
+  /* ---------- Sound-Bedienung ---------- */
+  function setToggle(btn, on, labelOn, labelOff) {
+    btn.setAttribute('aria-pressed', String(on));
+    btn.textContent = on ? labelOn : labelOff;
+  }
+  function toggleMusic() {
+    const on = !audio.musicOn;
+    audio.setMusic(on);
+    setToggle($('musicBtn'), on, 'Musik an (M)', 'Musik aus (M)');
+    if (on && (state === 'running' || state === 'clearing')) { audio.init(); audio.startMusic(false); }
+  }
+  $('musicBtn').addEventListener('click', e => { toggleMusic(); e.currentTarget.blur(); });
+  $('sfxBtn').addEventListener('click', e => {
+    const on = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+    audio.setSfx(on);
+    setToggle(e.currentTarget, on, 'Effekte an', 'Effekte aus');
+    e.currentTarget.blur();
+  });
+  $('volume').addEventListener('input', e => { audio.init(); audio.setVolume(e.target.value / 100); });
+  $('volume').addEventListener('change', e => e.target.blur());
+
+  /* ---------- Eingabe ---------- */
+  const actions = {
+    left: () => move(-1), right: () => move(1), rotate: () => rotate(1),
+    rotateCcw: () => rotate(-1), soft: softDrop, hard: hardDrop, hold
+  };
+  const KEYMAP = {
+    ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'rotate', x: 'rotate', X: 'rotate',
+    z: 'rotateCcw', Z: 'rotateCcw', y: 'rotateCcw', Y: 'rotateCcw',
+    ArrowDown: 'soft', ' ': 'hard', c: 'hold', C: 'hold', Shift: 'hold'
+  };
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && (state === 'idle' || state === 'over' || state === 'paused')) {
+      e.preventDefault(); state === 'paused' ? togglePause() : start(); return;
+    }
+    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') { togglePause(); return; }
+    if (e.key === 'm' || e.key === 'M') { toggleMusic(); return; }
+    const act = KEYMAP[e.key];
+    if (!act) return;
+    if (state === 'running' || state === 'clearing') e.preventDefault();
+    if (state !== 'running' || !piece) return;
+    actions[act]();
+  });
+
+  document.querySelectorAll('.touch button').forEach(b => {
+    b.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      if (state !== 'running' || !piece) return;
+      actions[b.dataset.act]();
+    });
+  });
+
+  /* ---------- Skalierung (Hoch- und Querformat, Retina) ---------- */
+  const DPR = () => Math.min(3, window.devicePixelRatio || 1);
+  [holdCtx, nextCtx].forEach(c => {
+    const cv = c.canvas;
+    cv._w = cv.width; cv._h = cv.height;
+    cv.width = cv._w * DPR(); cv.height = cv._h * DPR();
+    c.setTransform(DPR(), 0, 0, DPR(), 0, 0);
+  });
+
+  function fit() {
+    const cs = getComputedStyle(document.body);
+    const padT = parseFloat(cs.paddingTop) || 0, padB = parseFloat(cs.paddingBottom) || 0;
+    const padL = parseFloat(cs.paddingLeft) || 0, padR = parseFloat(cs.paddingRight) || 0;
+    const vh = window.innerHeight, vw = document.documentElement.clientWidth;
+    const header = document.querySelector('header').offsetHeight;
+    const touchEl = document.querySelector('.touch');
+    const touchH = getComputedStyle(touchEl).display !== 'none'
+      ? touchEl.offsetHeight + (parseFloat(getComputedStyle(touchEl).marginTop) || 0) : 0;
+    const narrow = window.matchMedia('(max-width: 680px)').matches;
+    const sides = narrow ? 0 : 2 * (160 + 16);
+    const availH = vh - header - touchH - padT - padB - 12;
+    const mainW = Math.min(vw - padL - padR, 780);           // main hat max-width 780px
+    const availW = narrow ? Math.min(vw * 0.86, mainW) : mainW - sides;
+    const BORDER = 6;                                          // 2 x 3px Rahmen (border-box)
+    const w = Math.max(150, Math.floor(Math.min((availH - BORDER) / 2, availW - BORDER)));
+    board.style.width = (w + BORDER) + 'px';
+    board.style.height = (w * 2 + BORDER) + 'px';
+    const k = (w / (COLS * SIZE)) * DPR();
+    board.width = Math.round(COLS * SIZE * k);
+    board.height = Math.round(ROWS * SIZE * k);
+    ctx.setTransform(k, 0, 0, k, 0, 0);
+  }
+  let fitTimer = null;
+  const refit = () => { clearTimeout(fitTimer); fitTimer = setTimeout(fit, 120); };
+  window.addEventListener('resize', refit);
+  window.addEventListener('orientationchange', () => setTimeout(fit, 300));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', refit);
+
+  /* ---------- iPad: Ton, Gesten, App-Wechsel ---------- */
+  // AudioContext erst bei der ersten Berührung starten (iOS-Vorgabe)
+  const unlockAudio = () => { audio.init(); audio.resume(); };
+  ['touchstart', 'pointerdown', 'keydown'].forEach(ev =>
+    document.addEventListener(ev, unlockAudio, { once: true, passive: true, capture: true }));
+  document.addEventListener('touchend', () => audio.resume(), { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      if (state === 'running' || state === 'clearing') togglePause();
+      audio.suspend();
+    } else {
+      audio.resume();
+    }
+  });
+  window.addEventListener('pageshow', () => audio.resume());
+
+  // Zoom-Gesten, Doppeltipp-Zoom und Kontextmenü unterdrücken
+  ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
+    document.addEventListener(ev, e => e.preventDefault(), { passive: false }));
+  document.addEventListener('dblclick', e => e.preventDefault(), { passive: false });
+  document.addEventListener('contextmenu', e => {
+    if (!e.target.closest('section.info')) e.preventDefault();
+  });
+  // Kein Scrollen beim Wischen über Spielfeld und Steuerung, Info-Bereiche bleiben scrollbar
+  document.querySelectorAll('.wellwrap, .touch').forEach(el =>
+    el.addEventListener('touchmove', e => e.preventDefault(), { passive: false }));
+  document.querySelector('.touch').addEventListener('touchstart', e => {
+    if (e.target.closest('button')) e.preventDefault();
+  }, { passive: false });
+
+  grid = emptyGrid();
+  level = 1;
+  updateSpeedHud();
+  fit();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
